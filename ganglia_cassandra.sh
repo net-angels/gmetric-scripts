@@ -9,6 +9,22 @@ if [ ! -d /tmp/cassmon ]
    mkdir /tmp/cassmon 
 fi 
 
+if [ ! `type -P links` ]
+then
+if [ `type -P apt-get ` ]
+  then
+        DISTRO_FAMILY=dpkg
+        apt-get -qq -y install links > /dev/null
+elif  [ `type -P yum ` ]
+   then
+        DISTRO_FAMILY=rpm
+        yum -q -y install links
+else
+   DISTRO_FAMILY=UNSUPPORTED
+fi
+fi
+
+
 function record_value
 {
     grep $1 $Newdatafile
@@ -78,5 +94,4 @@ done
 cassa_metrics
 
 cp "$Newdatafile" "$Olddatafile"
-
 
