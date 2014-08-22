@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Monitors HBase region servers by calling /jmx via web UI. 
+# Tested with HBase 0.98  version. 
+
 HOST=127.0.0.1
 Newdatafile=/tmp/hbasemon/new
 Olddatafile=/tmp/hbasemon/old

@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Requires mx4j-tools installed and listening port 8081. 
+# Installation of mx4j-tools is quite simple. 
+# Just download mx4j-tools.jar to Cassandra lib dir and restart Cassandra node 
+# for more information about mx4j-tool see http://mx4j.sourceforge.net/ 
+
 host=`hostname`
 Newdatafile=/tmp/cassmon/new
 Olddatafile=/tmp/cassmon/old
