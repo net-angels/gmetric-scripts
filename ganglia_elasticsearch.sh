@@ -1,47 +1,65 @@
-#!/bin/bash
+#!/bin/bash 
 
-export LC_ALL=C
-source /etc/bashrc 2> /dev/null
-source /etc/profile 2> /dev/null
+Newdatafile=/tmp/esmon/new
+Olddatafile=/tmp/esmon/old
 
-
-INT1=`ip add | grep -o '10.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/'|tr -d "/"`
-INT2=`ip add | grep -o '172.16.[0-9]\{1,3\}\.[0-9]\{1,3\}/'|tr -d "/"`
-INT3=`ip add | grep -o '192.168.[0-9]\{1,3\}\.[0-9]\{1,3\}/'|tr -d "/"`
-EXT1=`ip add | grep -o '[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}/' |tr -d "/"| grep -v 127.0.0.1`
-
-if [ $INT1 ] ; then IP=$INT1
-elif [ $INT2 ] ; then IP=$INT2
-elif [ $INT3 ] ; then IP=$INT3
-
-else IP=$EXT1
-fi
-
-if [ ! `type -P curl` ]
-then
-if [ `type -P apt-get ` ]
-  then
-        DISTRO_FAMILY=dpkg
-        apt-get -qq -y install curl > /dev/null
-elif  [ `type -P yum ` ]
-   then
-        DISTRO_FAMILY=rpm
-        yum -q -y install curl
-else
-   DISTRO_FAMILY=UNSUPPORTED
-fi
+if [ ! -d /tmp/esmon ]
+ then
+   mkdir /tmp/esmon
 fi
 
 
-curldata=$(curl -s "http://127.0.0.1:9200/_nodes/$IP/stats?all=true" | sed -e 's/[{}]/''/g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}'|tr -d '"')
+function record_value
+{
+    grep $1 $Newdatafile
+}
 
-METRICS="heap_committed_in_bytes|heap_used_in_bytes|non_heap_committed_in_bytes|non_heap_used_in_bytes|open_file_descriptors|http:current_open:|index_time_in_millis:|index_current:|delete_time_in_millis:|delete_current:|query_current:|query_time_in_millis:|fetch_time_in_millis:|fetch_current:|merges:current:"
+function record_value_rate
+{
+    es_VAR=$1
+    PREVIOUS_VALUE=`grep "$es_VAR[^_]" "$Olddatafile" |  grep -o "[0-9]\{1,\}"`
+    NEW_VALUE=`grep "$es_VAR[^_]" "$Newdatafile" |  grep -o "[0-9]\{1,\}"`
+    DELTA_VALUE=$(((NEW_VALUE-PREVIOUS_VALUE)))
+    PREVIOUS_TIMESTAMP=`date -r "$Olddatafile" +%s`
+    NEW_TIMESTAMP=`date -r "$Newdatafile" +%s`
+    DELTA_TIMESTAMP=$[ $NEW_TIMESTAMP-$PREVIOUS_TIMESTAMP ]
+    if [ $DELTA_VALUE -lt 0 ] || [ $DELTA_TIMESTAMP -lt 0 ]; then
+        printf "skipping\n"
+    else
+        DELTA_RATE=`echo "scale=4; $DELTA_VALUE/$DELTA_TIMESTAMP" | bc -l`
+              echo $es_VAR $DELTA_RATE
+    fi
+}
 
-echo -n "$curldata" | egrep -i $METRICS | while read LINE 
+URL="http://127.0.0.1:9200/_nodes/_local/stats/?all=true"
+
+curl -s  "$URL" | sed -e 's/[{}]/''/g' \
+        | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' \
+        | grep '"query_total"\|"index_total"\|"get"\|heap_committed_in_bytes\|heap_used_in_bytes\|open_file_descriptors\|current_open' \
+        | sed -s s/'":"'/_/g| tr -d '"' | sed -s s/total/per_second/g | sed -s s/indexing_//g \
+        | tr ':' ' ' | awk '{print "es_"$1,$2}'> $Newdatafile
+
+es_metrics () {
+        record_value_rate es_index_per_second
+        record_value_rate es_get_per_second
+        record_value_rate es_query_per_second
+	 
+	record_value es_open_file_descriptors
+	record_value es_mem_heap_used_in_bytes
+	record_value es_heap_committed_in_bytes
+	record_value es_non_heap_used_in_bytes
+	record_value es_non_heap_committed_in_bytes
+	record_value es_http_current_open
+	
+}
+
+
+es_metrics | while read STATS 
 do
- LINE2=`echo ${LINE//[-'"'' ',]/}`
- NAME=`echo es_${LINE2} |sed -e 's/merges:current/merges_current/g' -e 's/mem:heap/mem_heap/g' -e 's/http:current/http_current/g' | cut -d ":" -f 1`
- VALUE=`echo es_${LINE2} |sed -e 's/merges:current/merges_current/g' -e 's/mem:heap/mem_heap/g' -e 's/http:current/http_current/g' | cut -d ":" -f 2`
- /usr/bin/gmetric -c /etc/ganglia/gmond.conf --name $NAME --value $VALUE --type int32 -unit $NAME
+        NAME=`echo $STATS | awk '{print $1}'`
+        VALUE=`echo $STATS | awk '{print $2}'`
+	/usr/bin/gmetric -c /etc/ganglia/gmond.conf --name $NAME --value $VALUE --type int32 -unit $NAME -g ElasticSearch
 done
+
+cp "$Newdatafile" "$Olddatafile"
 
