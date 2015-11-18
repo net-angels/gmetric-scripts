@@ -11,17 +11,21 @@ for GANG in `cat $TEMP | grep -v uptime_in_seconds`
    VALUE=`echo $GANG|cut -d ':' -f2 | cat -v | tr -d '^M'`
     if [ $NAME == total_commands_processed ];
      then
-      VALUE=`echo $VALUE/$TIMESTAMP | bc`
+      VALUE2=`echo $VALUE/$TIMESTAMP | bc`
+      /usr/bin/gmetric -c /etc/ganglia/gmond.conf --name redis_$NAME --value $VALUE2 --type int32 --group Redis
     elif [ $NAME == keyspace_hits ]
      then
-      VALUE=`echo $VALUE/$TIMESTAMP | bc`
+      VALUE2=`echo $VALUE/$TIMESTAMP | bc`
+      /usr/bin/gmetric -c /etc/ganglia/gmond.conf --name redis_$NAME --value $VALUE2 --type int32 --group Redis
     elif [ $NAME == keyspace_misses ]
      then
-      VALUE=`echo $VALUE/$TIMESTAMP | bc`
+      VALUE2=`echo $VALUE/$TIMESTAMP | bc`
+      /usr/bin/gmetric -c /etc/ganglia/gmond.conf --name redis_$NAME --value $VALUE2 --type int32 --group Redis
     elif [ $NAME == changes_since_last_save ]
      then
-      VALUE=`echo $VALUE/$TIMESTAMP | bc`
+      VALUE2=`echo $VALUE/$TIMESTAMP | bc`
+      /usr/bin/gmetric -c /etc/ganglia/gmond.conf --name redis_$NAME --value $VALUE2 --type int32 --group Redis
+    else
+      /usr/bin/gmetric -c /etc/ganglia/gmond.conf --name redis_$NAME --value $VALUE --type int32 --group Redis
     fi
-   /usr/bin/gmetric -c /etc/ganglia/gmond.conf --name redis_$NAME --value $VALUE --type int32 --group Redis
  done
-
